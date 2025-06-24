@@ -1,50 +1,146 @@
-# Building a Remote MCP Server on Cloudflare (Without Auth)
+# CMP MCP Server
 
-This example allows you to deploy a remote MCP server that doesn't require authentication on Cloudflare Workers. 
+A Model Context Protocol (MCP) server for CMP (Connectivity Management Platform) API integration, built for Cloudflare Workers.
 
-## Get started: 
+## Features
 
-[![Deploy to Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-authless)
+- 🔍 **Query SIM List** - Retrieve SIM cards with filtering options (status, date range, ICCID range, etc.)
+- 📱 **Query SIM Details** - Get comprehensive SIM card information including usage statistics
+- 🔐 **Secure Authentication** - HMAC-SHA256 signature-based API authentication
+- ☁️ **Cloudflare Workers** - Serverless deployment with global edge network
+- 🌐 **MCP Compatible** - Works with Claude Desktop and other MCP clients
 
-This will deploy your MCP server to a URL like: `remote-mcp-server-authless.<your-account>.workers.dev/sse`
+## Quick Start
 
-Alternatively, you can use the command line below to get the remote MCP Server created on your local machine:
+### 1. Environment Setup
+
+Create your environment variables in Cloudflare Workers dashboard:
+
 ```bash
-npm create cloudflare@latest -- my-mcp-server --template=cloudflare/ai/demos/remote-mcp-authless
+# Required environment variables (set as secrets in Cloudflare)
+CMP_APP_KEY=your_cmp_app_key
+CMP_APP_SECRET=your_cmp_app_secret
 ```
 
-## Customizing your MCP Server
+The `CMP_ENDPOINT` is already configured in `wrangler.jsonc`.
 
-To add your own [tools](https://developers.cloudflare.com/agents/model-context-protocol/tools/) to the MCP server, define each tool inside the `init()` method of `src/index.ts` using `this.server.tool(...)`. 
+### 2. Deploy to Cloudflare Workers
 
-## Connect to Cloudflare AI Playground
+```bash
+# Install dependencies
+npm install
 
-You can connect to your MCP server from the Cloudflare AI Playground, which is a remote MCP client:
+# Deploy to Cloudflare Workers
+npm run deploy
+```
 
-1. Go to https://playground.ai.cloudflare.com/
-2. Enter your deployed MCP server URL (`remote-mcp-server-authless.<your-account>.workers.dev/sse`)
-3. You can now use your MCP tools directly from the playground!
+### 3. Local Development
 
-## Connect Claude Desktop to your MCP server
+```bash
+# Copy environment template
+cp .env.example .env
 
-You can also connect to your remote MCP server from local MCP clients, by using the [mcp-remote proxy](https://www.npmjs.com/package/mcp-remote). 
+# Edit .env with your actual credentials
+# Then start development server
+npm run dev
+```
 
-To connect to your MCP server from Claude Desktop, follow [Anthropic's Quickstart](https://modelcontextprotocol.io/quickstart/user) and within Claude Desktop go to Settings > Developer > Edit Config.
+## Configuration
 
-Update with this configuration:
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `CMP_APP_KEY` | Your CMP API application key | ✅ |
+| `CMP_APP_SECRET` | Your CMP API application secret | ✅ |
+| `CMP_ENDPOINT` | CMP API endpoint URL | ❌ (defaults to production) |
+
+### Setting Secrets in Cloudflare
+
+```bash
+# Set your API credentials as secrets
+wrangler secret put CMP_APP_KEY
+wrangler secret put CMP_APP_SECRET
+```
+
+## Available Tools
+
+### `query_sim_list`
+
+Query SIM cards with filtering options.
+
+**Parameters:**
+- `pageNum` (optional): Page number (default: 1)
+- `pageSize` (optional): Records per page (default: 10, max: 1000)
+- `enterpriseDataPlan` (optional): Enterprise data plan name
+- `expirationTimeStart` (optional): Start expiration date (yyyy-MM-dd)
+- `expirationTimeEnd` (optional): End expiration date (yyyy-MM-dd)
+- `iccidStart` (optional): ICCID start range
+- `iccidEnd` (optional): ICCID end range
+- `label` (optional): SIM card label
+- `simState` (optional): SIM state (2=Pre-activation, 3=Test, 4=Silent, 5=Standby, 6=Active, 7=Shutdown, 8=Pause, 10=Pre-logout, 11=Logout)
+- `simType` (optional): SIM card type
+
+### `query_sim_detail`
+
+Get detailed information for a specific SIM card.
+
+**Parameters:**
+- `iccid` (required): SIM card ICCID number
+
+## Connect to Claude Desktop
+
+To connect your MCP server to Claude Desktop, follow [Anthropic's Quickstart](https://modelcontextprotocol.io/quickstart/user) and update your Claude Desktop configuration:
 
 ```json
 {
   "mcpServers": {
-    "calculator": {
+    "cmp-server": {
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://localhost:8787/sse"  // or remote-mcp-server-authless.your-account.workers.dev/sse
+        "https://your-cmp-server.workers.dev/sse"
       ]
     }
   }
 }
 ```
 
-Restart Claude and you should see the tools become available. 
+## Connect to Cloudflare AI Playground
+
+1. Go to https://playground.ai.cloudflare.com/
+2. Enter your deployed MCP server URL (`your-cmp-server.workers.dev/sse`)
+3. Start using your CMP tools directly!
+
+## Development
+
+### Project Structure
+
+```
+src/
+├── index.ts        # Main MCP server implementation
+├── cmp_client.ts   # CMP API client with authentication
+└── ...
+```
+
+### Scripts
+
+```bash
+npm run dev         # Start development server
+npm run deploy      # Deploy to Cloudflare Workers
+npm run type-check  # Run TypeScript type checking
+npm run lint:fix    # Fix linting issues
+npm run format      # Format code
+```
+
+## Security
+
+- ✅ API credentials stored as Cloudflare Workers secrets
+- ✅ HMAC-SHA256 signature authentication
+- ✅ Environment variables validation
+- ✅ No sensitive data in source code
+- ✅ `.gitignore` configured for security
+
+## License
+
+MIT License - see LICENSE file for details. 

@@ -24,5 +24,8 @@
 	},
 	"observability": {
 		"enabled": true
+	},
+	"vars": {
+		"CMP_ENDPOINT": "https://cmp.acceleronix.io/gateway/openapi"
 	}
 }
