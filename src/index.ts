@@ -20,32 +20,24 @@ export class MyMCP extends McpAgent {
 			CMP_API_ENDPOINT?: string;
 		};
 		
-		// Debug: log all available environment variables
-		console.log('🔍 Environment debug info:');
-		console.log('Available env keys:', Object.keys(env || {}));
-		console.log('CMP_API_KEY present:', !!env.CMP_API_KEY);
-		console.log('CMP_API_SECRET present:', !!env.CMP_API_SECRET);
-		console.log('CMP_API_ENDPOINT value:', env.CMP_API_ENDPOINT);
-		console.log('Full env object:', JSON.stringify(env, null, 2));
+		// Get environment variables
+		const CMP_API_KEY = env.CMP_API_KEY;
+		const CMP_API_SECRET = env.CMP_API_SECRET;
+		const CMP_API_ENDPOINT = env.CMP_API_ENDPOINT || "https://cmp.acceleronix.io/gateway/openapi";
 		
-		// Validate that environment variables are available
-		if (!env.CMP_API_KEY || !env.CMP_API_SECRET || !env.CMP_API_ENDPOINT) {
-			console.error('Missing required CMP environment variables:', {
-				CMP_API_KEY: !!env.CMP_API_KEY,
-				CMP_API_SECRET: !!env.CMP_API_SECRET,
-				CMP_API_ENDPOINT: !!env.CMP_API_ENDPOINT
-			});
-			throw new Error('Missing required CMP API environment variables. Please set CMP_API_KEY, CMP_API_SECRET, and CMP_API_ENDPOINT in your Cloudflare Workers environment.');
+		// Validate required environment variables
+		if (!CMP_API_KEY || !CMP_API_SECRET) {
+			throw new Error('Missing required environment variables: CMP_API_KEY and CMP_API_SECRET must be set in Cloudflare Workers.');
 		}
 
 		console.log('✅ Environment variables loaded successfully');
-		console.log('🔗 CMP Endpoint:', env.CMP_API_ENDPOINT);
+		console.log('🔗 CMP Endpoint:', CMP_API_ENDPOINT);
 
-		// Initialize CMP client with configuration from environment variables
+		// Initialize CMP client with environment variables
 		this.cmpClient = new CMPClient(
-			env.CMP_API_KEY,
-			env.CMP_API_SECRET,
-			env.CMP_API_ENDPOINT
+			CMP_API_KEY,
+			CMP_API_SECRET,
+			CMP_API_ENDPOINT
 		);
 
 		// Query SIM list tool

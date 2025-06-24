@@ -94,7 +94,10 @@ export class CMPClient {
 		data?: any,
 		params?: Record<string, any>
 	): Promise<APIResponse<T>> {
-		const url = new URL(resourcePath, this.endpoint);
+		// Fix URL construction - ensure resourcePath is appended correctly
+		const baseUrl = this.endpoint.endsWith('/') ? this.endpoint.slice(0, -1) : this.endpoint;
+		const path = resourcePath.startsWith('/') ? resourcePath.slice(1) : resourcePath;
+		const url = new URL(`${baseUrl}/${path}`);
 		
 		if (params) {
 			for (const [key, value] of Object.entries(params)) {
