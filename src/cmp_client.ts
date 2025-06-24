@@ -107,6 +107,11 @@ export class CMPClient {
 		const requestBody = data ? JSON.stringify(data) : "";
 		const headers = await this.getHeaders(requestBody);
 
+		// Debug logging
+		console.log(`🔍 Making ${method} request to: ${url.toString()}`);
+		console.log(`📊 Request body: ${requestBody}`);
+		console.log(`🔑 Headers: ${JSON.stringify(headers)}`);
+
 		try {
 			const response = await fetch(url.toString(), {
 				method,
@@ -114,7 +119,11 @@ export class CMPClient {
 				body: requestBody || undefined,
 			});
 
+			console.log(`📡 Response status: ${response.status} ${response.statusText}`);
+
 			if (!response.ok) {
+				const responseText = await response.text();
+				console.log(`❌ Response body: ${responseText}`);
 				throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
 			}
 

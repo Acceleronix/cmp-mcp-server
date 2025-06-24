@@ -26,6 +26,6 @@
 		"enabled": true
 	},
 	"vars": {
-		"CMP_ENDPOINT": "https://cmp.acceleronix.io/gateway/openapi"
+		"CMP_API_ENDPOINT": "https://cmp.acceleronix.io/gateway/openapi"
 	}
 }
