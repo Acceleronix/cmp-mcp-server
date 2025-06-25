@@ -377,7 +377,7 @@ export class CMPClient {
 			console.log(`⚠️ Filtered out ${iccids.length - cleanedIccids.length} empty/invalid ICCIDs`);
 		}
 
-		return this.post("/openapi/esim/querySimBatch", { 
+		return this.post("/esim/querySimBatch", { 
 			iccids: cleanedIccids 
 		});
 	}
@@ -406,7 +406,7 @@ export class CMPClient {
 			throw new Error("Profile status must be between 1-9 (see ProfileStatus enum)");
 		}
 
-		return this.post("/openapi/esim/euicc/page", data);
+		return this.post("/esim/euicc/page", data);
 	}
 
 	formatDataUsage(bytesValue: number): string {

@@ -211,8 +211,8 @@ export class MyMCP extends McpAgent {
 					{
 						name: "eSIM Batch Query (New API)",
 						test: async () => {
-							console.log("🧪 Testing /openapi/esim/querySimBatch");
-							return await this.cmpClient.post("/openapi/esim/querySimBatch", { 
+							console.log("🧪 Testing /esim/querySimBatch");
+							return await this.cmpClient.post("/esim/querySimBatch", { 
 								iccids: [testIccid, "8932042000002328544"] 
 							});
 						}
@@ -220,8 +220,8 @@ export class MyMCP extends McpAgent {
 					{
 						name: "eUICC List Query (New API)",
 						test: async () => {
-							console.log("🧪 Testing /openapi/esim/euicc/page");
-							return await this.cmpClient.post("/openapi/esim/euicc/page", { 
+							console.log("🧪 Testing /esim/euicc/page");
+							return await this.cmpClient.post("/esim/euicc/page", { 
 								pageNum: 1, 
 								pageSize: 5 
 							});
