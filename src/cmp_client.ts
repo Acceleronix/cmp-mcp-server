@@ -12,17 +12,17 @@ export enum SIMState {
 
 export function getStateName(stateCode: number): string {
 	const stateMap: Record<number, string> = {
-		2: "预激活",
-		3: "测试",
-		4: "沉默",
-		5: "待机",
-		6: "激活",
-		7: "停机",
-		8: "暂停",
-		10: "预注销",
-		11: "注销",
+		2: "Pre-activation",
+		3: "Test",
+		4: "Silent",
+		5: "Standby",
+		6: "Active",
+		7: "Shutdown",
+		8: "Pause",
+		10: "Pre-logout",
+		11: "Logout",
 	};
-	return stateMap[stateCode] || `未知状态(${stateCode})`;
+	return stateMap[stateCode] || `Unknown status (${stateCode})`;
 }
 
 export interface SIMListQuery {
@@ -43,6 +43,29 @@ export interface APIResponse<T = any> {
 	msg?: string;
 	reqId?: string;
 	data: T;
+}
+
+export interface SIMUsageQuery {
+	iccid: string;
+	month: string; // yyyyMM format
+}
+
+export interface DataUsageDetail {
+	dataAllowance: string; // Total data allowance in MB
+	dataUsage: string; // Used data in MB
+	orderName: string; // Order name
+	outsideRegionDataUsage: string; // Outside region data usage in MB
+	type: number; // 1: Activation period plan, 2: Test period plan, 3: Data package
+}
+
+export interface SIMUsageResponse {
+	dataUsageDetails: DataUsageDetail[];
+	iccid: string;
+	month: string; // yyyyMM format
+	outsideRegionDataUsage: string; // Outside region data usage in MB
+	remainingData: string; // Remaining data in MB
+	totalDataAllowance: string; // Total data allowance in MB
+	totalDataUsage: string; // Total used data in MB
 }
 
 export class CMPClient {
@@ -194,10 +217,32 @@ export class CMPClient {
 
 	async querySimDetail(iccid: string): Promise<APIResponse> {
 		if (!iccid || !iccid.trim()) {
-			throw new Error("ICCID不能为空");
+			throw new Error("ICCID cannot be empty");
 		}
 
 		return this.post("/sim/detail", { iccid: iccid.trim() });
+	}
+
+	async querySimMonthData(options: SIMUsageQuery): Promise<APIResponse<SIMUsageResponse>> {
+		const { iccid, month } = options;
+		
+		if (!iccid || !iccid.trim()) {
+			throw new Error("ICCID cannot be empty");
+		}
+		
+		if (!month || !month.trim()) {
+			throw new Error("Month cannot be empty");
+		}
+		
+		// Validate month format (yyyyMM)
+		if (!/^\d{6}$/.test(month.trim())) {
+			throw new Error("Month format must be yyyyMM (e.g., 202301)");
+		}
+
+		return this.post("/sim/queryMonthData", { 
+			iccid: iccid.trim(), 
+			month: month.trim() 
+		});
 	}
 
 	formatDataUsage(bytesValue: number): string {

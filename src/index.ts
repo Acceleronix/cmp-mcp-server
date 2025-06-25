@@ -1,7 +1,7 @@
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { CMPClient, getStateName } from "./cmp_client.js";
+import { CMPClient, getStateName, SIMUsageQuery, DataUsageDetail } from "./cmp_client.js";
 
 // Define our MCP agent with tools
 export class MyMCP extends McpAgent {
@@ -44,16 +44,16 @@ export class MyMCP extends McpAgent {
 		this.server.tool(
 			"query_sim_list",
 			{
-				pageNum: z.number().optional().describe("页码，默认1"),
-				pageSize: z.number().optional().describe("每页记录数，默认10，最大1000"),
-				enterpriseDataPlan: z.string().optional().describe("企业资费计划名称"),
-				expirationTimeStart: z.string().optional().describe("起始到期时间，格式：yyyy-MM-dd"),
-				expirationTimeEnd: z.string().optional().describe("截止到期时间，格式：yyyy-MM-dd"),
-				iccidStart: z.string().optional().describe("ICCID起始号码"),
-				iccidEnd: z.string().optional().describe("ICCID截止号码"),
-				label: z.string().optional().describe("标签"),
-				simState: z.number().optional().describe("卡状态 (2:预激活 3:测试 4:沉默 5:待机 6:激活 7:停机 8:暂停 10:预注销 11:注销)"),
-				simType: z.string().optional().describe("卡类型"),
+				pageNum: z.number().optional().describe("Page number, default 1"),
+				pageSize: z.number().optional().describe("Records per page, default 10, max 1000"),
+				enterpriseDataPlan: z.string().optional().describe("Enterprise data plan name"),
+				expirationTimeStart: z.string().optional().describe("Start expiration date, format: yyyy-MM-dd"),
+				expirationTimeEnd: z.string().optional().describe("End expiration date, format: yyyy-MM-dd"),
+				iccidStart: z.string().optional().describe("ICCID start number"),
+				iccidEnd: z.string().optional().describe("ICCID end number"),
+				label: z.string().optional().describe("Label"),
+				simState: z.number().optional().describe("SIM state (2:Pre-activation 3:Test 4:Silent 5:Standby 6:Active 7:Shutdown 8:Pause 10:Pre-logout 11:Logout)"),
+				simType: z.string().optional().describe("SIM card type"),
 			},
 			async (params) => {
 				try {
@@ -63,28 +63,28 @@ export class MyMCP extends McpAgent {
 						const data = response.data;
 						const simList = data.list || [];
 						
-						let result = `📊 SIM卡查询结果\n`;
-						result += `├─ 当前页码: ${data.current}\n`;
-						result += `├─ 每页数量: ${data.size}\n`;
-						result += `├─ 总页数: ${data.pages}\n`;
-						result += `├─ 总记录数: ${data.total}\n\n`;
+						let result = `📊 SIM Query Results\n`;
+						result += `├─ Current Page: ${data.current}\n`;
+						result += `├─ Page Size: ${data.size}\n`;
+						result += `├─ Total Pages: ${data.pages}\n`;
+						result += `├─ Total Records: ${data.total}\n\n`;
 						
 						if (simList.length > 0) {
-							result += `🔍 找到 ${simList.length} 张SIM卡:\n`;
+							result += `🔍 Found ${simList.length} SIM cards:\n`;
 							simList.forEach((sim: any, index: number) => {
 								result += `\n${index + 1}. 📱 ICCID: ${sim.iccid || 'N/A'}\n`;
 								result += `   ├─ IMSI: ${sim.imsi || 'N/A'}\n`;
 								result += `   ├─ MSISDN: ${sim.msisdn || 'N/A'}\n`;
-								result += `   ├─ 状态: ${getStateName(sim.simState || 0)}\n`;
-								result += `   ├─ 卡类型: ${sim.simType || 'N/A'}\n`;
-								result += `   ├─ 企业: ${sim.enterprise || 'N/A'}\n`;
-								result += `   ├─ 资费计划: ${sim.enterpriseDataPlan || 'N/A'}\n`;
-								result += `   ├─ 激活时间: ${sim.activationTime || 'N/A'}\n`;
-								result += `   ├─ 到期时间: ${sim.expirationTime || 'N/A'}\n`;
-								result += `   └─ 标签: ${sim.label || '无'}\n`;
+								result += `   ├─ Status: ${getStateName(sim.simState || 0)}\n`;
+								result += `   ├─ Card Type: ${sim.simType || 'N/A'}\n`;
+								result += `   ├─ Enterprise: ${sim.enterprise || 'N/A'}\n`;
+								result += `   ├─ Data Plan: ${sim.enterpriseDataPlan || 'N/A'}\n`;
+								result += `   ├─ Activation Time: ${sim.activationTime || 'N/A'}\n`;
+								result += `   ├─ Expiration Time: ${sim.expirationTime || 'N/A'}\n`;
+								result += `   └─ Label: ${sim.label || 'None'}\n`;
 							});
 						} else {
-							result += "❌ 没有找到符合条件的SIM卡";
+							result += "❌ No SIM cards found matching the criteria";
 						}
 						
 						return { content: [{ type: "text", text: result }] };
@@ -93,7 +93,7 @@ export class MyMCP extends McpAgent {
 							content: [
 								{
 									type: "text",
-									text: `❌ 查询失败: ${response.msg || 'Unknown error'}`
+									text: `❌ Query failed: ${response.msg || 'Unknown error'}`
 								}
 							]
 						};
@@ -103,7 +103,7 @@ export class MyMCP extends McpAgent {
 						content: [
 							{
 								type: "text",
-								text: `❌ 查询SIM列表失败: ${error instanceof Error ? error.message : 'Unknown error'}`
+								text: `❌ Failed to query SIM list: ${error instanceof Error ? error.message : 'Unknown error'}`
 							}
 						]
 					};
@@ -115,7 +115,7 @@ export class MyMCP extends McpAgent {
 		this.server.tool(
 			"query_sim_detail",
 			{
-				iccid: z.string().describe("SIM卡的ICCID号码"),
+				iccid: z.string().describe("SIM card ICCID number"),
 			},
 			async ({ iccid }) => {
 				try {
@@ -124,33 +124,33 @@ export class MyMCP extends McpAgent {
 					if (response.code === 200) {
 						const sim = response.data;
 						
-						let result = `📱 SIM卡详细信息\n`;
+						let result = `📱 SIM Card Details\n`;
 						result += `├─ SIM ID: ${sim.simId || 'N/A'}\n`;
 						result += `├─ ICCID: ${sim.iccid || 'N/A'}\n`;
 						result += `├─ MSISDN: ${sim.msisdn || 'N/A'}\n`;
 						result += `├─ IMEI: ${sim.imei || 'N/A'}\n`;
 						result += `├─ IMSI: ${sim.imsi || 'N/A'}\n`;
-						result += `├─ 归属企业: ${sim.enterprise || 'N/A'}\n`;
-						result += `├─ 标签: ${sim.label || '无'}\n`;
-						result += `├─ 状态: ${getStateName(sim.simState || 0)}\n`;
-						result += `├─ 状态变更原因: ${sim.simStateChangeReason || 'N/A'}\n`;
-						result += `├─ 所在国家/地区: ${sim.countryRegion || 'N/A'}\n`;
-						result += `├─ 运营商网络: ${sim.operatorNetwork || 'N/A'}\n`;
-						result += `├─ 企业资费计划: ${sim.enterpriseDataPlan || 'N/A'}\n`;
-						result += `├─ 网络制式: ${sim.networkType || 'N/A'}\n`;
-						result += `├─ 卡类型: ${sim.simType || 'N/A'}\n`;
+						result += `├─ Enterprise: ${sim.enterprise || 'N/A'}\n`;
+						result += `├─ Label: ${sim.label || 'None'}\n`;
+						result += `├─ Status: ${getStateName(sim.simState || 0)}\n`;
+						result += `├─ State Change Reason: ${sim.simStateChangeReason || 'N/A'}\n`;
+						result += `├─ Country/Region: ${sim.countryRegion || 'N/A'}\n`;
+						result += `├─ Operator Network: ${sim.operatorNetwork || 'N/A'}\n`;
+						result += `├─ Enterprise Data Plan: ${sim.enterpriseDataPlan || 'N/A'}\n`;
+						result += `├─ Network Type: ${sim.networkType || 'N/A'}\n`;
+						result += `├─ Card Type: ${sim.simType || 'N/A'}\n`;
 						result += `├─ APN: ${sim.apn || 'N/A'}\n`;
 						result += `├─ RAT: ${sim.rat || 'N/A'}\n`;
-						result += `├─ 开卡时间: ${sim.initialTime || 'N/A'}\n`;
-						result += `├─ 激活时间: ${sim.activationTime || 'N/A'}\n`;
-						result += `├─ 到期时间: ${sim.expirationTime || 'N/A'}\n`;
-						result += `├─ 上次会话时间: ${sim.lastSessionTime || 'N/A'}\n`;
+						result += `├─ Initial Time: ${sim.initialTime || 'N/A'}\n`;
+						result += `├─ Activation Time: ${sim.activationTime || 'N/A'}\n`;
+						result += `├─ Expiration Time: ${sim.expirationTime || 'N/A'}\n`;
+						result += `├─ Last Session Time: ${sim.lastSessionTime || 'N/A'}\n`;
 						
-						// 格式化数据用量
+						// Format data usage
 						const dataUsage = sim.usedDataOfCurrentPeriod || 0;
 						const usage = typeof dataUsage === 'string' ? parseInt(dataUsage) || 0 : dataUsage;
 						const formattedUsage = this.cmpClient.formatDataUsage(usage);
-						result += `└─ 当前周期数据用量: ${formattedUsage}\n`;
+						result += `└─ Current Period Data Usage: ${formattedUsage}\n`;
 						
 						return { content: [{ type: "text", text: result }] };
 					} else {
@@ -158,7 +158,7 @@ export class MyMCP extends McpAgent {
 							content: [
 								{
 									type: "text",
-									text: `❌ 查询失败: ${response.msg || 'Unknown error'}`
+									text: `❌ Query failed: ${response.msg || 'Unknown error'}`
 								}
 							]
 						};
@@ -168,7 +168,73 @@ export class MyMCP extends McpAgent {
 						content: [
 							{
 								type: "text",
-								text: `❌ 查询SIM详情失败: ${error instanceof Error ? error.message : 'Unknown error'}`
+								text: `❌ Failed to query SIM details: ${error instanceof Error ? error.message : 'Unknown error'}`
+							}
+						]
+					};
+				}
+			}
+		);
+
+		// Query SIM usage details tool
+		this.server.tool(
+			"query_sim_usage",
+			{
+				iccid: z.string().describe("SIM card ICCID number"),
+				month: z.string().describe("Query month in yyyyMM format (e.g., 202301)"),
+			},
+			async ({ iccid, month }) => {
+				try {
+					const response = await this.cmpClient.querySimMonthData({ iccid, month });
+					
+					if (response.code === 200) {
+						const usage = response.data;
+						
+						let result = `📊 SIM Usage Details\n`;
+						result += `├─ ICCID: ${usage.iccid}\n`;
+						result += `├─ Month: ${usage.month}\n`;
+						result += `├─ Total Data Allowance: ${usage.totalDataAllowance} MB\n`;
+						result += `├─ Total Data Usage: ${usage.totalDataUsage} MB\n`;
+						result += `├─ Remaining Data: ${usage.remainingData} MB\n`;
+						result += `├─ Outside Region Usage: ${usage.outsideRegionDataUsage} MB\n\n`;
+						
+						if (usage.dataUsageDetails && usage.dataUsageDetails.length > 0) {
+							result += `📋 Usage Details:\n`;
+							usage.dataUsageDetails.forEach((detail: DataUsageDetail, index: number) => {
+								const typeMap = {
+									1: "Activation Period Plan",
+									2: "Test Period Plan", 
+									3: "Data Package"
+								};
+								const typeName = typeMap[detail.type as keyof typeof typeMap] || `Type ${detail.type}`;
+								
+								result += `\n${index + 1}. 📦 ${detail.orderName}\n`;
+								result += `   ├─ Type: ${typeName}\n`;
+								result += `   ├─ Allowance: ${detail.dataAllowance} MB\n`;
+								result += `   ├─ Used: ${detail.dataUsage} MB\n`;
+								result += `   └─ Outside Region: ${detail.outsideRegionDataUsage} MB\n`;
+							});
+						} else {
+							result += "❌ No detailed usage data available";
+						}
+						
+						return { content: [{ type: "text", text: result }] };
+					} else {
+						return {
+							content: [
+								{
+									type: "text",
+									text: `❌ Query failed: ${response.msg || 'Unknown error'}`
+								}
+							]
+						};
+					}
+				} catch (error) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `❌ Failed to query SIM usage: ${error instanceof Error ? error.message : 'Unknown error'}`
 							}
 						]
 					};
