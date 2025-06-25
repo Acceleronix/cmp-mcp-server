@@ -377,21 +377,41 @@ export class CMPClient {
 			console.log(`⚠️ Filtered out ${iccids.length - cleanedIccids.length} empty/invalid ICCIDs`);
 		}
 
-		// Try both formats - array and comma-separated string
-		console.log(`📤 Sending eSIM batch query with ${cleanedIccids.length} ICCIDs`);
+		// Try different request formats based on API documentation
+		console.log(`📤 Attempting eSIM batch query with ${cleanedIccids.length} ICCIDs: ${cleanedIccids.slice(0, 2).join(', ')}...`);
 		
-		// First try with array format
+		// Format 1: Array format
+		const format1 = { iccids: cleanedIccids };
+		console.log(`🧪 Trying format 1 (array): ${JSON.stringify(format1)}`);
+		
 		try {
-			return await this.post("/esim/querySimBatch", { 
-				iccids: cleanedIccids 
-			});
-		} catch (error) {
-			console.log(`⚠️ Array format failed, trying string format: ${error}`);
+			return await this.post("/esim/querySimBatch", format1);
+		} catch (error1) {
+			console.log(`❌ Format 1 failed: ${error1}`);
 			
-			// Try with comma-separated string format
-			return this.post("/esim/querySimBatch", { 
-				iccids: cleanedIccids.join(',')
-			});
+			// Format 2: Comma-separated string
+			const format2 = { iccids: cleanedIccids.join(',') };
+			console.log(`🧪 Trying format 2 (string): ${JSON.stringify(format2)}`);
+			
+			try {
+				return await this.post("/esim/querySimBatch", format2);
+			} catch (error2) {
+				console.log(`❌ Format 2 failed: ${error2}`);
+				
+				// Format 3: Wrapped in simBatchQuery object
+				const format3 = { simBatchQuery: { iccids: cleanedIccids } };
+				console.log(`🧪 Trying format 3 (wrapped): ${JSON.stringify(format3)}`);
+				
+				try {
+					return await this.post("/esim/querySimBatch", format3);
+				} catch (error3) {
+					console.log(`❌ Format 3 failed: ${error3}`);
+					
+					// Format 4: Direct array (no wrapper)
+					console.log(`🧪 Trying format 4 (direct array): ${JSON.stringify(cleanedIccids)}`);
+					return this.post("/esim/querySimBatch", cleanedIccids);
+				}
+			}
 		}
 	}
 

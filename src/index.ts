@@ -212,9 +212,28 @@ export class MyMCP extends McpAgent {
 						name: "eSIM Batch Query (New API)",
 						test: async () => {
 							console.log("🧪 Testing /esim/querySimBatch");
-							return await this.cmpClient.post("/esim/querySimBatch", { 
-								iccids: [testIccid, "8932042000002328544"] 
-							});
+							// Test different possible endpoints
+							const endpoints = [
+								"/esim/querySimBatch",
+								"/esim/batch/query", 
+								"/batch/queryeSim",
+								"/openapi/esim/querySimBatch"
+							];
+							
+							for (const endpoint of endpoints) {
+								try {
+									console.log(`🔍 Trying endpoint: ${endpoint}`);
+									return await this.cmpClient.post(endpoint, { 
+										iccids: [testIccid, "8932042000002328544"] 
+									});
+								} catch (error) {
+									console.log(`❌ ${endpoint} failed: ${error}`);
+									continue;
+								}
+							}
+							
+							// If all endpoints fail, throw the last error
+							throw new Error("All eSIM batch query endpoints failed");
 						}
 					},
 					{
