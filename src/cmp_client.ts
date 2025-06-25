@@ -68,26 +68,6 @@ export interface SIMUsageResponse {
 	totalDataUsage: string; // Total used data in MB
 }
 
-export interface ESimBatchQuery {
-	iccids: string[]; // ICCID list, max 100 items
-}
-
-export interface SimBatchVO {
-	eid: string; // eID
-	iccid: string; // ICCID
-	imei: string; // IMEI
-	imsi: string; // IMSI
-	message: number; // Error code
-	msisdn: string; // MSISDN
-	status: number; // Status: 0 = Query success; 1 = Query failed
-}
-
-export interface ESimBatchResponse {
-	code: number;
-	data: SimBatchVO[];
-	msg: string;
-	reqId: string;
-}
 
 export interface EuiccPageQuery {
 	childEnterpriseId?: number; // Child enterprise ID to query
@@ -353,67 +333,6 @@ export class CMPClient {
 		});
 	}
 
-	async queryESimBatch(options: ESimBatchQuery): Promise<APIResponse<ESimBatchResponse>> {
-		const { iccids } = options;
-		
-		if (!iccids || !Array.isArray(iccids) || iccids.length === 0) {
-			throw new Error("ICCID list cannot be empty");
-		}
-		
-		if (iccids.length > 100) {
-			throw new Error("Maximum 100 ICCIDs are supported per batch query");
-		}
-		
-		// Validate and clean ICCIDs
-		const cleanedIccids = iccids
-			.map(iccid => iccid?.trim())
-			.filter(iccid => iccid && iccid.length > 0);
-		
-		if (cleanedIccids.length === 0) {
-			throw new Error("No valid ICCIDs provided");
-		}
-		
-		if (cleanedIccids.length !== iccids.length) {
-			console.log(`⚠️ Filtered out ${iccids.length - cleanedIccids.length} empty/invalid ICCIDs`);
-		}
-
-		// Try different request formats based on API documentation
-		console.log(`📤 Attempting eSIM batch query with ${cleanedIccids.length} ICCIDs: ${cleanedIccids.slice(0, 2).join(', ')}...`);
-		
-		// Format 1: Array format
-		const format1 = { iccids: cleanedIccids };
-		console.log(`🧪 Trying format 1 (array): ${JSON.stringify(format1)}`);
-		
-		try {
-			return await this.post("/esim/querySimBatch", format1);
-		} catch (error1) {
-			console.log(`❌ Format 1 failed: ${error1}`);
-			
-			// Format 2: Comma-separated string
-			const format2 = { iccids: cleanedIccids.join(',') };
-			console.log(`🧪 Trying format 2 (string): ${JSON.stringify(format2)}`);
-			
-			try {
-				return await this.post("/esim/querySimBatch", format2);
-			} catch (error2) {
-				console.log(`❌ Format 2 failed: ${error2}`);
-				
-				// Format 3: Wrapped in simBatchQuery object
-				const format3 = { simBatchQuery: { iccids: cleanedIccids } };
-				console.log(`🧪 Trying format 3 (wrapped): ${JSON.stringify(format3)}`);
-				
-				try {
-					return await this.post("/esim/querySimBatch", format3);
-				} catch (error3) {
-					console.log(`❌ Format 3 failed: ${error3}`);
-					
-					// Format 4: Direct array (no wrapper)
-					console.log(`🧪 Trying format 4 (direct array): ${JSON.stringify(cleanedIccids)}`);
-					return this.post("/esim/querySimBatch", cleanedIccids);
-				}
-			}
-		}
-	}
 
 	async queryEuiccPage(options: EuiccPageQuery = {}): Promise<APIResponse<EuiccPageResponse>> {
 		const {

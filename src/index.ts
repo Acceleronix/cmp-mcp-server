@@ -1,7 +1,7 @@
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { CMPClient, getStateName, SIMUsageQuery, DataUsageDetail, ESimBatchQuery, SimBatchVO, EuiccPageQuery, EuiccPageDto, getProfileStatusName, getProfileTypeName } from "./cmp_client.js";
+import { CMPClient, getStateName, SIMUsageQuery, DataUsageDetail, EuiccPageQuery, EuiccPageDto, getProfileStatusName, getProfileTypeName } from "./cmp_client.js";
 
 // Define our MCP agent with tools
 export class MyMCP extends McpAgent {
@@ -209,34 +209,6 @@ export class MyMCP extends McpAgent {
 						}
 					},
 					{
-						name: "eSIM Batch Query (New API)",
-						test: async () => {
-							console.log("🧪 Testing /esim/querySimBatch");
-							// Test different possible endpoints
-							const endpoints = [
-								"/esim/querySimBatch",
-								"/esim/batch/query", 
-								"/batch/queryeSim",
-								"/openapi/esim/querySimBatch"
-							];
-							
-							for (const endpoint of endpoints) {
-								try {
-									console.log(`🔍 Trying endpoint: ${endpoint}`);
-									return await this.cmpClient.post(endpoint, { 
-										iccids: [testIccid, "8932042000002328544"] 
-									});
-								} catch (error) {
-									console.log(`❌ ${endpoint} failed: ${error}`);
-									continue;
-								}
-							}
-							
-							// If all endpoints fail, throw the last error
-							throw new Error("All eSIM batch query endpoints failed");
-						}
-					},
-					{
 						name: "eUICC List Query (New API)",
 						test: async () => {
 							console.log("🧪 Testing /esim/euicc/page");
@@ -349,83 +321,6 @@ export class MyMCP extends McpAgent {
 			}
 		);
 
-		// Query eSIM batch tool
-		this.server.tool(
-			"query_esim_batch",
-			{
-				iccids: z.array(z.string()).describe("Array of ICCID numbers to query (max 100)"),
-			},
-			async ({ iccids }) => {
-				try {
-					const response = await this.cmpClient.queryESimBatch({ iccids });
-					
-					// More flexible response checking for eSIM API
-					if (response.code === 200 || (response.data && Array.isArray(response.data))) {
-						const esimData = response.data;
-						
-						let result = `📡 eSIM Batch Query Results\n`;
-						result += `├─ Request ID: ${response.reqId || 'N/A'}\n`;
-						result += `├─ Total Queried: ${iccids.length}\n`;
-						result += `├─ Total Results: ${esimData.length}\n\n`;
-						
-						if (esimData && esimData.length > 0) {
-							// Categorize results
-							const successful = esimData.filter((sim: SimBatchVO) => sim.status === 0);
-							const failed = esimData.filter((sim: SimBatchVO) => sim.status === 1);
-							
-							result += `📊 Summary:\n`;
-							result += `├─ ✅ Successful: ${successful.length}\n`;
-							result += `├─ ❌ Failed: ${failed.length}\n\n`;
-							
-							// Show successful results
-							if (successful.length > 0) {
-								result += `🔍 Successful eSIM Results:\n`;
-								successful.forEach((sim: SimBatchVO, index: number) => {
-									result += `\n${index + 1}. 📱 ICCID: ${sim.iccid || 'N/A'}\n`;
-									result += `   ├─ eID: ${sim.eid || 'N/A'}\n`;
-									result += `   ├─ IMSI: ${sim.imsi || 'N/A'}\n`;
-									result += `   ├─ IMEI: ${sim.imei || 'N/A'}\n`;
-									result += `   ├─ MSISDN: ${sim.msisdn || 'N/A'}\n`;
-									result += `   └─ Status: Success\n`;
-								});
-							}
-							
-							// Show failed results
-							if (failed.length > 0) {
-								result += `\n❌ Failed eSIM Queries:\n`;
-								failed.forEach((sim: SimBatchVO, index: number) => {
-									result += `\n${index + 1}. 📱 ICCID: ${sim.iccid || 'N/A'}\n`;
-									result += `   ├─ Status: Failed\n`;
-									result += `   └─ Error Code: ${sim.message || 'Unknown'}\n`;
-								});
-							}
-						} else {
-							result += "❌ No eSIM data returned from the API";
-						}
-						
-						return { content: [{ type: "text", text: result }] };
-					} else {
-						return {
-							content: [
-								{
-									type: "text",
-									text: `❌ Query failed: ${response.msg || 'Unknown error'}`
-								}
-							]
-						};
-					}
-				} catch (error) {
-					return {
-						content: [
-							{
-								type: "text",
-								text: `❌ Failed to query eSIM batch: ${error instanceof Error ? error.message : 'Unknown error'}`
-							}
-						]
-					};
-				}
-			}
-		);
 
 		// Query eUICC list tool
 		this.server.tool(
