@@ -475,6 +475,203 @@ export class MyMCP extends McpAgent {
 				}
 			}
 		);
+
+		// Filter eUICC by profile status
+		this.server.tool(
+			"filter_euicc_by_status",
+			{
+				profileStatus: z.number().min(1).max(9).describe("Profile status to filter (1:Not downloaded, 2:Downloading, 3:Downloaded, 4:Enabling, 5:Enabled, 6:Disabling, 7:Disabled, 8:Deleting, 9:Deleted)"),
+				pageSize: z.number().optional().describe("Number of results to return, default 20"),
+			},
+			async ({ profileStatus, pageSize = 20 }) => {
+				try {
+					const response = await this.cmpClient.queryEuiccPage({ 
+						profileStatus, 
+						pageSize: Math.min(pageSize, 100) 
+					});
+					
+					if (response.code === 200 && response.data) {
+						const data = response.data;
+						const euiccList = data.list || [];
+						const statusName = getProfileStatusName(profileStatus);
+						
+						let result = `🔍 eUICC Devices with Status: ${statusName}\n`;
+						result += `├─ Total Found: ${data.total}\n`;
+						result += `├─ Showing: ${euiccList.length} devices\n\n`;
+						
+						if (euiccList.length > 0) {
+							euiccList.forEach((euicc: EuiccPageDto, index: number) => {
+								result += `${index + 1}. 📱 ${euicc.enterpriseName || 'Unknown Enterprise'}\n`;
+								result += `   ├─ eID: ${euicc.eid || 'N/A'}\n`;
+								result += `   ├─ ICCID: ${euicc.iccid || 'N/A'}\n`;
+								result += `   ├─ Profile Type: ${getProfileTypeName(euicc.profileType || '0')}\n`;
+								result += `   └─ Last Update: ${euicc.lastOperateTime || 'N/A'}\n\n`;
+							});
+						} else {
+							result += `❌ No eUICC devices found with status "${statusName}"`;
+						}
+						
+						return { content: [{ type: "text", text: result }] };
+					} else {
+						return {
+							content: [{ type: "text", text: `❌ Query failed: ${response.msg || 'Unknown error'}` }]
+						};
+					}
+				} catch (error) {
+					return {
+						content: [{ type: "text", text: `❌ Failed to filter eUICC by status: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+					};
+				}
+			}
+		);
+
+		// Search eUICC by eID or ICCID
+		this.server.tool(
+			"search_euicc",
+			{
+				searchTerm: z.string().describe("Search term (eID or ICCID to search for)"),
+				searchType: z.enum(["auto", "eid", "iccid"]).optional().describe("Search type: auto (detect), eid, or iccid. Default: auto"),
+			},
+			async ({ searchTerm, searchType = "auto" }) => {
+				try {
+					// Auto-detect search type if not specified
+					let actualSearchType = searchType;
+					if (searchType === "auto") {
+						// eID is typically longer (32 chars), ICCID is usually 19-20 chars
+						actualSearchType = searchTerm.length > 25 ? "eid" : "iccid";
+					}
+					
+					const queryParams: EuiccPageQuery = { pageSize: 50 };
+					if (actualSearchType === "iccid") {
+						queryParams.iccid = searchTerm;
+					}
+					// Note: API doesn't seem to support eID search directly, so we'll search all and filter
+					
+					const response = await this.cmpClient.queryEuiccPage(queryParams);
+					
+					if (response.code === 200 && response.data) {
+						let euiccList = response.data.list || [];
+						
+						// If searching by eID, filter results
+						if (actualSearchType === "eid") {
+							euiccList = euiccList.filter((euicc: EuiccPageDto) => 
+								euicc.eid && euicc.eid.toLowerCase().includes(searchTerm.toLowerCase())
+							);
+						}
+						
+						let result = `🔍 eUICC Search Results\n`;
+						result += `├─ Search Term: ${searchTerm}\n`;
+						result += `├─ Search Type: ${actualSearchType.toUpperCase()}\n`;
+						result += `├─ Results Found: ${euiccList.length}\n\n`;
+						
+						if (euiccList.length > 0) {
+							euiccList.forEach((euicc: EuiccPageDto, index: number) => {
+								result += `${index + 1}. 📱 eUICC Match\n`;
+								result += `   ├─ eID: ${euicc.eid || 'N/A'}\n`;
+								result += `   ├─ ICCID: ${euicc.iccid || 'N/A'}\n`;
+								result += `   ├─ IMEI: ${euicc.imei || 'N/A'}\n`;
+								result += `   ├─ Enterprise: ${euicc.enterpriseName || 'N/A'}\n`;
+								result += `   ├─ Status: ${getProfileStatusName(euicc.profileStatus || 0)}\n`;
+								result += `   ├─ Type: ${getProfileTypeName(euicc.profileType || '0')}\n`;
+								result += `   └─ Last Update: ${euicc.lastOperateTime || 'N/A'}\n\n`;
+							});
+						} else {
+							result += `❌ No eUICC devices found matching "${searchTerm}"`;
+						}
+						
+						return { content: [{ type: "text", text: result }] };
+					} else {
+						return {
+							content: [{ type: "text", text: `❌ Search failed: ${response.msg || 'Unknown error'}` }]
+						};
+					}
+				} catch (error) {
+					return {
+						content: [{ type: "text", text: `❌ Failed to search eUICC: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+					};
+				}
+			}
+		);
+
+		// Get eUICC profile statistics
+		this.server.tool(
+			"euicc_profile_stats",
+			{
+				maxResults: z.number().optional().describe("Maximum number of records to analyze, default 100"),
+			},
+			async ({ maxResults = 100 }) => {
+				try {
+					const response = await this.cmpClient.queryEuiccPage({ 
+						pageSize: Math.min(maxResults, 1000) 
+					});
+					
+					if (response.code === 200 && response.data) {
+						const euiccList = response.data.list || [];
+						
+						// Calculate statistics
+						const statusCounts: Record<number, number> = {};
+						const typeCounts: Record<string, number> = {};
+						const enterpriseCounts: Record<string, number> = {};
+						
+						euiccList.forEach((euicc: EuiccPageDto) => {
+							// Status statistics
+							const status = euicc.profileStatus || 0;
+							statusCounts[status] = (statusCounts[status] || 0) + 1;
+							
+							// Type statistics
+							const type = euicc.profileType || '0';
+							typeCounts[type] = (typeCounts[type] || 0) + 1;
+							
+							// Enterprise statistics
+							const enterprise = euicc.enterpriseName || 'Unknown';
+							enterpriseCounts[enterprise] = (enterpriseCounts[enterprise] || 0) + 1;
+						});
+						
+						let result = `📊 eUICC Profile Statistics\n`;
+						result += `├─ Total Analyzed: ${euiccList.length} devices\n`;
+						result += `├─ Total in System: ${response.data.total}\n\n`;
+						
+						// Profile Status Distribution
+						result += `📋 Profile Status Distribution:\n`;
+						Object.entries(statusCounts)
+							.sort((a, b) => b[1] - a[1])
+							.forEach(([status, count]) => {
+								const statusName = getProfileStatusName(parseInt(status));
+								const percentage = ((count / euiccList.length) * 100).toFixed(1);
+								result += `├─ ${statusName}: ${count} (${percentage}%)\n`;
+							});
+						
+						result += `\n🏷️ Profile Type Distribution:\n`;
+						Object.entries(typeCounts)
+							.sort((a, b) => b[1] - a[1])
+							.forEach(([type, count]) => {
+								const typeName = getProfileTypeName(type);
+								const percentage = ((count / euiccList.length) * 100).toFixed(1);
+								result += `├─ ${typeName}: ${count} (${percentage}%)\n`;
+							});
+						
+						result += `\n🏢 Top Enterprises:\n`;
+						Object.entries(enterpriseCounts)
+							.sort((a, b) => b[1] - a[1])
+							.slice(0, 5)
+							.forEach(([enterprise, count]) => {
+								const percentage = ((count / euiccList.length) * 100).toFixed(1);
+								result += `├─ ${enterprise}: ${count} (${percentage}%)\n`;
+							});
+						
+						return { content: [{ type: "text", text: result }] };
+					} else {
+						return {
+							content: [{ type: "text", text: `❌ Statistics query failed: ${response.msg || 'Unknown error'}` }]
+						};
+					}
+				} catch (error) {
+					return {
+						content: [{ type: "text", text: `❌ Failed to get eUICC statistics: ${error instanceof Error ? error.message : 'Unknown error'}` }]
+					};
+				}
+			}
+		);
 	}
 }
 

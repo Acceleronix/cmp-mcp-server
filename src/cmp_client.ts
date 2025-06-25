@@ -377,9 +377,22 @@ export class CMPClient {
 			console.log(`⚠️ Filtered out ${iccids.length - cleanedIccids.length} empty/invalid ICCIDs`);
 		}
 
-		return this.post("/esim/querySimBatch", { 
-			iccids: cleanedIccids 
-		});
+		// Try both formats - array and comma-separated string
+		console.log(`📤 Sending eSIM batch query with ${cleanedIccids.length} ICCIDs`);
+		
+		// First try with array format
+		try {
+			return await this.post("/esim/querySimBatch", { 
+				iccids: cleanedIccids 
+			});
+		} catch (error) {
+			console.log(`⚠️ Array format failed, trying string format: ${error}`);
+			
+			// Try with comma-separated string format
+			return this.post("/esim/querySimBatch", { 
+				iccids: cleanedIccids.join(',')
+			});
+		}
 	}
 
 	async queryEuiccPage(options: EuiccPageQuery = {}): Promise<APIResponse<EuiccPageResponse>> {
