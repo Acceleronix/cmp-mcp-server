@@ -1,7 +1,7 @@
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { CMPClient, getStateName, SIMUsageQuery, DataUsageDetail, ESimBatchQuery, SimBatchVO } from "./cmp_client.js";
+import { CMPClient, getStateName, SIMUsageQuery, DataUsageDetail, ESimBatchQuery, SimBatchVO, EuiccPageQuery, EuiccPageDto, getProfileStatusName, getProfileTypeName } from "./cmp_client.js";
 
 // Define our MCP agent with tools
 export class MyMCP extends McpAgent {
@@ -216,6 +216,16 @@ export class MyMCP extends McpAgent {
 								iccids: [testIccid, "8932042000002328544"] 
 							});
 						}
+					},
+					{
+						name: "eUICC List Query (New API)",
+						test: async () => {
+							console.log("🧪 Testing /openapi/esim/euicc/page");
+							return await this.cmpClient.post("/openapi/esim/euicc/page", { 
+								pageNum: 1, 
+								pageSize: 5 
+							});
+						}
 					}
 				];
 
@@ -391,6 +401,74 @@ export class MyMCP extends McpAgent {
 							{
 								type: "text",
 								text: `❌ Failed to query eSIM batch: ${error instanceof Error ? error.message : 'Unknown error'}`
+							}
+						]
+					};
+				}
+			}
+		);
+
+		// Query eUICC list tool
+		this.server.tool(
+			"query_euicc_list",
+			{
+				pageNum: z.number().optional().describe("Page number, default 1"),
+				pageSize: z.number().optional().describe("Records per page, default 10, max 1000"),
+				childEnterpriseId: z.number().optional().describe("Child enterprise ID to filter"),
+				iccid: z.string().optional().describe("ICCID filter"),
+				profileStatus: z.number().optional().describe("Profile status filter (1:Not downloaded, 2:Downloading, 3:Downloaded, 4:Enabling, 5:Enabled, 6:Disabling, 7:Disabled, 8:Deleting, 9:Deleted)"),
+			},
+			async (params) => {
+				try {
+					const response = await this.cmpClient.queryEuiccPage(params);
+					
+					// Flexible response checking
+					if (response.code === 200 || (response.data && typeof response.data === 'object')) {
+						const data = response.data;
+						const euiccList = data.list || [];
+						
+						let result = `📡 eUICC List Results\n`;
+						result += `├─ Request ID: ${response.reqId || 'N/A'}\n`;
+						result += `├─ Current Page: ${data.current}\n`;
+						result += `├─ Page Size: ${data.size}\n`;
+						result += `├─ Total Pages: ${data.pages}\n`;
+						result += `├─ Total Records: ${data.total}\n\n`;
+						
+						if (euiccList.length > 0) {
+							result += `🔍 Found ${euiccList.length} eUICC devices:\n`;
+							
+							euiccList.forEach((euicc: EuiccPageDto, index: number) => {
+								result += `\n${index + 1}. 📱 eUICC Device\n`;
+								result += `   ├─ eID: ${euicc.eid || 'N/A'}\n`;
+								result += `   ├─ ICCID: ${euicc.iccid || 'N/A'}\n`;
+								result += `   ├─ IMEI: ${euicc.imei || 'N/A'}\n`;
+								result += `   ├─ Enterprise: ${euicc.enterpriseName || 'N/A'}\n`;
+								result += `   ├─ Profile Number: ${euicc.profileNum || 'N/A'}\n`;
+								result += `   ├─ Profile Status: ${getProfileStatusName(euicc.profileStatus || 0)}\n`;
+								result += `   ├─ Profile Type: ${getProfileTypeName(euicc.profileType || '0')}\n`;
+								result += `   └─ Last Operation: ${euicc.lastOperateTime || 'N/A'}\n`;
+							});
+						} else {
+							result += "❌ No eUICC devices found matching the criteria";
+						}
+						
+						return { content: [{ type: "text", text: result }] };
+					} else {
+						return {
+							content: [
+								{
+									type: "text",
+									text: `❌ Query failed: ${response.msg || 'Unknown error'}`
+								}
+							]
+						};
+					}
+				} catch (error) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `❌ Failed to query eUICC list: ${error instanceof Error ? error.message : 'Unknown error'}`
 							}
 						]
 					};

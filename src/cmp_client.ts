@@ -89,6 +89,77 @@ export interface ESimBatchResponse {
 	reqId: string;
 }
 
+export interface EuiccPageQuery {
+	childEnterpriseId?: number; // Child enterprise ID to query
+	iccid?: string; // ICCID filter
+	pageNum?: number; // Page number, default 1
+	pageSize?: number; // Records per page, default 10, max 1000
+	profileStatus?: number; // Profile status filter
+}
+
+export interface EuiccPageDto {
+	eid: string; // eID
+	enterpriseName: string; // Enterprise name
+	iccid: string; // ICCID
+	imei: string; // IMEI
+	lastOperateTime: string; // Last operation time
+	profileNum: number; // Profile number
+	profileStatus: number; // Profile status: 1-9 (see enum below)
+	profileType: string; // Profile type: 0=Test, 1=Provisioning, 2=Operational
+}
+
+export interface EuiccPageData {
+	current: number; // Current page number
+	extend: EuiccPageDto; // Extended field (seems to be sample data)
+	list: EuiccPageDto[]; // Data list
+	pages: number; // Total pages
+	size: number; // Page size
+	total: number; // Total records
+}
+
+export interface EuiccPageResponse {
+	code: number;
+	data: EuiccPageData;
+	msg: string;
+	reqId: string;
+}
+
+export enum ProfileStatus {
+	NOT_DOWNLOADED = 1,
+	DOWNLOADING = 2,
+	DOWNLOADED = 3,
+	ENABLING = 4,
+	ENABLED = 5,
+	DISABLING = 6,
+	DISABLED = 7,
+	DELETING = 8,
+	DELETED = 9,
+}
+
+export function getProfileStatusName(status: number): string {
+	const statusMap: Record<number, string> = {
+		1: "Not Downloaded",
+		2: "Downloading",
+		3: "Downloaded",
+		4: "Enabling",
+		5: "Enabled",
+		6: "Disabling",
+		7: "Disabled",
+		8: "Deleting",
+		9: "Deleted",
+	};
+	return statusMap[status] || `Unknown Status (${status})`;
+}
+
+export function getProfileTypeName(type: string): string {
+	const typeMap: Record<string, string> = {
+		"0": "Test Profile",
+		"1": "Provisioning Profile", 
+		"2": "Operational Profile",
+	};
+	return typeMap[type] || `Unknown Type (${type})`;
+}
+
 export class CMPClient {
 	private appKey: string;
 	private appSecret: string;
@@ -309,6 +380,33 @@ export class CMPClient {
 		return this.post("/openapi/esim/querySimBatch", { 
 			iccids: cleanedIccids 
 		});
+	}
+
+	async queryEuiccPage(options: EuiccPageQuery = {}): Promise<APIResponse<EuiccPageResponse>> {
+		const {
+			childEnterpriseId,
+			iccid,
+			pageNum = 1,
+			pageSize = 10,
+			profileStatus,
+		} = options;
+
+		const data: Record<string, any> = {
+			pageNum,
+			pageSize: Math.min(pageSize, 1000),
+		};
+
+		// Add optional filters
+		if (childEnterpriseId !== undefined) data.childEnterpriseId = childEnterpriseId;
+		if (iccid && iccid.trim()) data.iccid = iccid.trim();
+		if (profileStatus !== undefined) data.profileStatus = profileStatus;
+
+		// Validate profileStatus if provided
+		if (profileStatus !== undefined && (profileStatus < 1 || profileStatus > 9)) {
+			throw new Error("Profile status must be between 1-9 (see ProfileStatus enum)");
+		}
+
+		return this.post("/openapi/esim/euicc/page", data);
 	}
 
 	formatDataUsage(bytesValue: number): string {
