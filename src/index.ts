@@ -176,6 +176,74 @@ export class MyMCP extends McpAgent {
 			}
 		);
 
+		// Test all three API endpoints for comparison
+		this.server.tool(
+			"compare_api_endpoints",
+			{
+				testIccid: z.string().optional().describe("ICCID to test with (default: 8932042000002328543)"),
+			},
+			async ({ testIccid = "8932042000002328543" }) => {
+				const tests = [
+					{
+						name: "SIM List (Known Working)",
+						test: async () => {
+							console.log("🧪 Testing /sim/page");
+							return await this.cmpClient.post("/sim/page", { pageNum: 1, pageSize: 5 });
+						}
+					},
+					{
+						name: "SIM Detail (Known Working)",
+						test: async () => {
+							console.log("🧪 Testing /sim/detail");
+							return await this.cmpClient.post("/sim/detail", { iccid: testIccid });
+						}
+					},
+					{
+						name: "SIM Usage (New API)",
+						test: async () => {
+							console.log("🧪 Testing /sim/queryMonthData");
+							return await this.cmpClient.post("/sim/queryMonthData", { 
+								iccid: testIccid, 
+								month: "202310" 
+							});
+						}
+					}
+				];
+
+				let result = `🔬 API Endpoint Comparison Test\n`;
+				result += `📋 Test ICCID: ${testIccid}\n`;
+				result += `🕐 Test Time: ${new Date().toISOString()}\n\n`;
+
+				for (let i = 0; i < tests.length; i++) {
+					const test = tests[i];
+					result += `${i + 1}. ${test.name}\n`;
+					result += `${'─'.repeat(40)}\n`;
+					
+					try {
+						const response = await test.test();
+						result += `✅ Status: ${response.code}\n`;
+						result += `📊 Message: ${response.msg || 'Success'}\n`;
+						
+						if (response.code === 200 && response.data) {
+							if (typeof response.data === 'object') {
+								const dataKeys = Object.keys(response.data);
+								result += `📋 Data Keys: ${dataKeys.join(', ')}\n`;
+								if (response.data.list) {
+									result += `📝 Records: ${response.data.list.length} items\n`;
+								}
+							}
+						}
+					} catch (error) {
+						result += `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}\n`;
+					}
+					
+					result += `\n`;
+				}
+
+				return { content: [{ type: "text", text: result }] };
+			}
+		);
+
 		// Query SIM usage details tool
 		this.server.tool(
 			"query_sim_usage",

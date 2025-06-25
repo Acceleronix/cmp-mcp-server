@@ -154,6 +154,7 @@ export class CMPClient {
 			}
 
 			const result: APIResponse<T> = await response.json();
+			console.log(`📋 Response data: ${JSON.stringify(result)}`);
 
 			if (result.code !== 200) {
 				throw new Error(`API Error [${result.code}]: ${result.msg || "Unknown error"}`);
