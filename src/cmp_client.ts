@@ -156,6 +156,21 @@ export class CMPClient {
 			const result: APIResponse<T> = await response.json();
 			console.log(`📋 Response data: ${JSON.stringify(result)}`);
 
+			// Handle different response formats
+			if (result.code === undefined) {
+				// Some APIs might return data directly without wrapper
+				if (typeof result === 'object' && result !== null) {
+					console.log(`⚠️ API returned data without standard wrapper, treating as success`);
+					return {
+						code: 200,
+						msg: "OK",
+						data: result as T
+					} as APIResponse<T>;
+				} else {
+					throw new Error(`API Error: Invalid response format - ${JSON.stringify(result)}`);
+				}
+			}
+
 			if (result.code !== 200) {
 				throw new Error(`API Error [${result.code}]: ${result.msg || "Unknown error"}`);
 			}

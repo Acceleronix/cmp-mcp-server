@@ -255,7 +255,8 @@ export class MyMCP extends McpAgent {
 				try {
 					const response = await this.cmpClient.querySimMonthData({ iccid, month });
 					
-					if (response.code === 200) {
+					// More flexible response checking
+					if (response.code === 200 || (response.data && typeof response.data === 'object')) {
 						const usage = response.data;
 						
 						let result = `📊 SIM Usage Details\n`;
