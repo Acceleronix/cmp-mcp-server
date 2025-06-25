@@ -306,7 +306,7 @@ export class CMPClient {
 			console.log(`⚠️ Filtered out ${iccids.length - cleanedIccids.length} empty/invalid ICCIDs`);
 		}
 
-		return this.post("/esim/querySimBatch", { 
+		return this.post("/openapi/esim/querySimBatch", { 
 			iccids: cleanedIccids 
 		});
 	}

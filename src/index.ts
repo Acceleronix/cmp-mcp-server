@@ -211,8 +211,8 @@ export class MyMCP extends McpAgent {
 					{
 						name: "eSIM Batch Query (New API)",
 						test: async () => {
-							console.log("🧪 Testing /esim/querySimBatch");
-							return await this.cmpClient.post("/esim/querySimBatch", { 
+							console.log("🧪 Testing /openapi/esim/querySimBatch");
+							return await this.cmpClient.post("/openapi/esim/querySimBatch", { 
 								iccids: [testIccid, "8932042000002328544"] 
 							});
 						}
