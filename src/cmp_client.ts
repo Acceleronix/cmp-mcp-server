@@ -68,6 +68,27 @@ export interface SIMUsageResponse {
 	totalDataUsage: string; // Total used data in MB
 }
 
+export interface ESimBatchQuery {
+	iccids: string[]; // ICCID list, max 100 items
+}
+
+export interface SimBatchVO {
+	eid: string; // eID
+	iccid: string; // ICCID
+	imei: string; // IMEI
+	imsi: string; // IMSI
+	message: number; // Error code
+	msisdn: string; // MSISDN
+	status: number; // Status: 0 = Query success; 1 = Query failed
+}
+
+export interface ESimBatchResponse {
+	code: number;
+	data: SimBatchVO[];
+	msg: string;
+	reqId: string;
+}
+
 export class CMPClient {
 	private appKey: string;
 	private appSecret: string;
@@ -258,6 +279,35 @@ export class CMPClient {
 		return this.post("/sim/queryMonthData", { 
 			iccid: iccid.trim(), 
 			month: month.trim() 
+		});
+	}
+
+	async queryESimBatch(options: ESimBatchQuery): Promise<APIResponse<ESimBatchResponse>> {
+		const { iccids } = options;
+		
+		if (!iccids || !Array.isArray(iccids) || iccids.length === 0) {
+			throw new Error("ICCID list cannot be empty");
+		}
+		
+		if (iccids.length > 100) {
+			throw new Error("Maximum 100 ICCIDs are supported per batch query");
+		}
+		
+		// Validate and clean ICCIDs
+		const cleanedIccids = iccids
+			.map(iccid => iccid?.trim())
+			.filter(iccid => iccid && iccid.length > 0);
+		
+		if (cleanedIccids.length === 0) {
+			throw new Error("No valid ICCIDs provided");
+		}
+		
+		if (cleanedIccids.length !== iccids.length) {
+			console.log(`⚠️ Filtered out ${iccids.length - cleanedIccids.length} empty/invalid ICCIDs`);
+		}
+
+		return this.post("/esim/querySimBatch", { 
+			iccids: cleanedIccids 
 		});
 	}
 
