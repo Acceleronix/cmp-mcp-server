@@ -40,12 +40,13 @@ export class MyMCP extends McpAgent {
 			CMP_API_ENDPOINT
 		);
 
-		// Query SIM list tool
+		// Query SIM list tool with cursor-based pagination
 		this.server.tool(
 			"query_sim_list",
 			{
-				pageNum: z.number().optional().describe("Page number, default 1"),
-				pageSize: z.number().optional().describe("Records per page, default 10, max 1000"),
+				cursor: z.string().optional().describe("Pagination cursor for continuing from previous request"),
+				pageSize: z.number().optional().describe("Records per page, default 10, max 50 (reduced for token efficiency)"),
+				format: z.enum(["compact", "detailed"]).optional().describe("Response format: 'compact' (default, saves tokens) or 'detailed'"),
 				enterpriseDataPlan: z.string().optional().describe("Enterprise data plan name"),
 				expirationTimeStart: z.string().optional().describe("Start expiration date, format: yyyy-MM-dd"),
 				expirationTimeEnd: z.string().optional().describe("End expiration date, format: yyyy-MM-dd"),
@@ -57,37 +58,89 @@ export class MyMCP extends McpAgent {
 			},
 			async (params) => {
 				try {
-					const response = await this.cmpClient.querySimList(params);
+					// Parse cursor to get page number and other state
+					let pageNum = 1;
+					let cursorData: any = {};
+					
+					if (params.cursor) {
+						cursorData = CMPClient.parseCursor(params.cursor);
+						pageNum = cursorData.pageNum || 1;
+					}
+					
+					// Limit page size for token efficiency
+					const pageSize = Math.min(params.pageSize || 10, 50);
+					const format = params.format || "compact";
+					
+					const queryParams = {
+						pageNum,
+						pageSize,
+						...params
+					};
+					delete queryParams.cursor;
+					delete queryParams.format;
+					
+					const response = await this.cmpClient.querySimList(queryParams);
 					
 					if (response.code === 200) {
 						const data = response.data;
 						const simList = data.list || [];
 						
-						let result = `📊 SIM Query Results\n`;
-						result += `├─ Current Page: ${data.current}\n`;
-						result += `├─ Page Size: ${data.size}\n`;
-						result += `├─ Total Pages: ${data.pages}\n`;
-						result += `├─ Total Records: ${data.total}\n\n`;
-						
-						if (simList.length > 0) {
-							result += `🔍 Found ${simList.length} SIM cards:\n`;
-							simList.forEach((sim: any, index: number) => {
-								result += `\n${index + 1}. 📱 ICCID: ${sim.iccid || 'N/A'}\n`;
-								result += `   ├─ IMSI: ${sim.imsi || 'N/A'}\n`;
-								result += `   ├─ MSISDN: ${sim.msisdn || 'N/A'}\n`;
-								result += `   ├─ Status: ${getStateName(sim.simState || 0)}\n`;
-								result += `   ├─ Card Type: ${sim.simType || 'N/A'}\n`;
-								result += `   ├─ Enterprise: ${sim.enterprise || 'N/A'}\n`;
-								result += `   ├─ Data Plan: ${sim.enterpriseDataPlan || 'N/A'}\n`;
-								result += `   ├─ Activation Time: ${sim.activationTime || 'N/A'}\n`;
-								result += `   ├─ Expiration Time: ${sim.expirationTime || 'N/A'}\n`;
-								result += `   └─ Label: ${sim.label || 'None'}\n`;
-							});
-						} else {
-							result += "❌ No SIM cards found matching the criteria";
+						// Generate next cursor if there are more pages
+						let nextCursor: string | undefined;
+						if (data.current < data.pages) {
+							const nextCursorData = {
+								pageNum: data.current + 1,
+								...cursorData
+							};
+							nextCursor = CMPClient.createCursor(nextCursorData);
 						}
 						
-						return { content: [{ type: "text", text: result }] };
+						let result: string;
+						
+						if (format === "compact") {
+							// Compact format to save tokens
+							result = `📊 SIM List (Page ${data.current}/${data.pages}, Total: ${data.total})\n`;
+							if (simList.length > 0) {
+								result += simList.map((sim: any, idx: number) => 
+									`${idx + 1}. ${sim.iccid} | ${getStateName(sim.simState)} | ${sim.enterpriseDataPlan || 'N/A'}`
+								).join('\n');
+								if (nextCursor) {
+									result += `\n\n🔄 More data available. Use cursor: ${nextCursor.slice(0, 20)}...`;
+								}
+							} else {
+								result += "No SIM cards found";
+							}
+						} else {
+							// Detailed format (original format)
+							result = `📊 SIM Query Results\n`;
+							result += `├─ Current Page: ${data.current}\n`;
+							result += `├─ Total Pages: ${data.pages}\n`;
+							result += `├─ Total Records: ${data.total}\n\n`;
+							
+							if (simList.length > 0) {
+								result += `🔍 Found ${simList.length} SIM cards:\n`;
+								simList.forEach((sim: any, index: number) => {
+									result += `\n${index + 1}. 📱 ICCID: ${sim.iccid || 'N/A'}\n`;
+									result += `   ├─ Status: ${getStateName(sim.simState || 0)}\n`;
+									result += `   ├─ Enterprise: ${sim.enterprise || 'N/A'}\n`;
+									result += `   └─ Data Plan: ${sim.enterpriseDataPlan || 'N/A'}\n`;
+								});
+							}
+							if (nextCursor) {
+								result += `\n\n🔄 Next cursor: ${nextCursor}`;
+							}
+						}
+						
+						const response_content: any = { 
+							content: [{ type: "text", text: result }]
+						};
+						
+						// Add nextCursor to response if available (MCP standard)
+						if (nextCursor) {
+							response_content.nextCursor = nextCursor;
+						}
+						
+						return response_content;
 					} else {
 						return {
 							content: [
@@ -176,9 +229,9 @@ export class MyMCP extends McpAgent {
 			}
 		);
 
-		// Test all three API endpoints for comparison
+		// Test all three API endpoints for comparison (development tool)
 		this.server.tool(
-			"compare_api_endpoints",
+			"_dev_compare_api_endpoints",
 			{
 				testIccid: z.string().optional().describe("ICCID to test with (default: 8932042000002328543)"),
 			},
@@ -322,51 +375,102 @@ export class MyMCP extends McpAgent {
 		);
 
 
-		// Query eUICC list tool
+		// Query eUICC list tool with cursor-based pagination
 		this.server.tool(
 			"query_euicc_list",
 			{
-				pageNum: z.number().optional().describe("Page number, default 1"),
-				pageSize: z.number().optional().describe("Records per page, default 10, max 1000"),
+				cursor: z.string().optional().describe("Pagination cursor for continuing from previous request"),
+				pageSize: z.number().optional().describe("Records per page, default 10, max 50 (reduced for token efficiency)"),
+				format: z.enum(["compact", "detailed"]).optional().describe("Response format: 'compact' (default, saves tokens) or 'detailed'"),
 				childEnterpriseId: z.number().optional().describe("Child enterprise ID to filter"),
 				iccid: z.string().optional().describe("ICCID filter"),
 				profileStatus: z.number().optional().describe("Profile status filter (1:Not downloaded, 2:Downloading, 3:Downloaded, 4:Enabling, 5:Enabled, 6:Disabling, 7:Disabled, 8:Deleting, 9:Deleted)"),
 			},
 			async (params) => {
 				try {
-					const response = await this.cmpClient.queryEuiccPage(params);
+					// Parse cursor to get page number and other state
+					let pageNum = 1;
+					let cursorData: any = {};
+					
+					if (params.cursor) {
+						cursorData = CMPClient.parseCursor(params.cursor);
+						pageNum = cursorData.pageNum || 1;
+					}
+					
+					// Limit page size for token efficiency
+					const pageSize = Math.min(params.pageSize || 10, 50);
+					const format = params.format || "compact";
+					
+					const queryParams = {
+						pageNum,
+						pageSize,
+						...params
+					};
+					delete queryParams.cursor;
+					delete queryParams.format;
+					
+					const response = await this.cmpClient.queryEuiccPage(queryParams);
 					
 					// Flexible response checking
 					if (response.code === 200 || (response.data && typeof response.data === 'object')) {
 						const data = response.data;
 						const euiccList = data.list || [];
 						
-						let result = `📡 eUICC List Results\n`;
-						result += `├─ Request ID: ${response.reqId || 'N/A'}\n`;
-						result += `├─ Current Page: ${data.current}\n`;
-						result += `├─ Page Size: ${data.size}\n`;
-						result += `├─ Total Pages: ${data.pages}\n`;
-						result += `├─ Total Records: ${data.total}\n\n`;
-						
-						if (euiccList.length > 0) {
-							result += `🔍 Found ${euiccList.length} eUICC devices:\n`;
-							
-							euiccList.forEach((euicc: EuiccPageDto, index: number) => {
-								result += `\n${index + 1}. 📱 eUICC Device\n`;
-								result += `   ├─ eID: ${euicc.eid || 'N/A'}\n`;
-								result += `   ├─ ICCID: ${euicc.iccid || 'N/A'}\n`;
-								result += `   ├─ IMEI: ${euicc.imei || 'N/A'}\n`;
-								result += `   ├─ Enterprise: ${euicc.enterpriseName || 'N/A'}\n`;
-								result += `   ├─ Profile Number: ${euicc.profileNum || 'N/A'}\n`;
-								result += `   ├─ Profile Status: ${getProfileStatusName(euicc.profileStatus || 0)}\n`;
-								result += `   ├─ Profile Type: ${getProfileTypeName(euicc.profileType || '0')}\n`;
-								result += `   └─ Last Operation: ${euicc.lastOperateTime || 'N/A'}\n`;
-							});
-						} else {
-							result += "❌ No eUICC devices found matching the criteria";
+						// Generate next cursor if there are more pages
+						let nextCursor: string | undefined;
+						if (data.current < data.pages) {
+							const nextCursorData = {
+								pageNum: data.current + 1,
+								...cursorData
+							};
+							nextCursor = CMPClient.createCursor(nextCursorData);
 						}
 						
-						return { content: [{ type: "text", text: result }] };
+						let result: string;
+						
+						if (format === "compact") {
+							// Compact format to save tokens
+							result = `📡 eUICC List (Page ${data.current}/${data.pages}, Total: ${data.total})\n`;
+							if (euiccList.length > 0) {
+								result += euiccList.map((euicc: EuiccPageDto, idx: number) => 
+									`${idx + 1}. ${euicc.iccid} | ${getProfileStatusName(euicc.profileStatus || 0)} | ${euicc.enterpriseName || 'N/A'}`
+								).join('\n');
+								if (nextCursor) {
+									result += `\n\n🔄 More data available. Use cursor: ${nextCursor.slice(0, 20)}...`;
+								}
+							} else {
+								result += "No eUICC devices found";
+							}
+						} else {
+							// Detailed format (original format but simplified)
+							result = `📡 eUICC List Results\n`;
+							result += `├─ Current Page: ${data.current}\n`;
+							result += `├─ Total Pages: ${data.pages}\n`;
+							result += `├─ Total Records: ${data.total}\n\n`;
+							
+							if (euiccList.length > 0) {
+								result += `🔍 Found ${euiccList.length} eUICC devices:\n`;
+								euiccList.forEach((euicc: EuiccPageDto, index: number) => {
+									result += `\n${index + 1}. 📱 ${euicc.iccid}\n`;
+									result += `   ├─ Status: ${getProfileStatusName(euicc.profileStatus || 0)}\n`;
+									result += `   └─ Enterprise: ${euicc.enterpriseName || 'N/A'}\n`;
+								});
+							}
+							if (nextCursor) {
+								result += `\n\n🔄 Next cursor: ${nextCursor}`;
+							}
+						}
+						
+						const response_content: any = { 
+							content: [{ type: "text", text: result }]
+						};
+						
+						// Add nextCursor to response if available (MCP standard)
+						if (nextCursor) {
+							response_content.nextCursor = nextCursor;
+						}
+						
+						return response_content;
 					} else {
 						return {
 							content: [
@@ -390,9 +494,9 @@ export class MyMCP extends McpAgent {
 			}
 		);
 
-		// Filter eUICC by profile status
+		// Filter eUICC by profile status (legacy - use query_euicc_list with profileStatus instead)
 		this.server.tool(
-			"filter_euicc_by_status",
+			"_legacy_filter_euicc_by_status",
 			{
 				profileStatus: z.number().min(1).max(9).describe("Profile status to filter (1:Not downloaded, 2:Downloading, 3:Downloaded, 4:Enabling, 5:Enabled, 6:Disabling, 7:Disabled, 8:Deleting, 9:Deleted)"),
 				pageSize: z.number().optional().describe("Number of results to return, default 20"),
@@ -439,9 +543,9 @@ export class MyMCP extends McpAgent {
 			}
 		);
 
-		// Search eUICC by eID or ICCID
+		// Search eUICC by eID or ICCID (legacy - use query_euicc_list with iccid instead)
 		this.server.tool(
-			"search_euicc",
+			"_legacy_search_euicc",
 			{
 				searchTerm: z.string().describe("Search term (eID or ICCID to search for)"),
 				searchType: z.enum(["auto", "eid", "iccid"]).optional().describe("Search type: auto (detect), eid, or iccid. Default: auto"),
@@ -511,12 +615,13 @@ export class MyMCP extends McpAgent {
 		this.server.tool(
 			"euicc_profile_stats",
 			{
-				maxResults: z.number().optional().describe("Maximum number of records to analyze, default 100"),
+				maxResults: z.number().optional().describe("Maximum number of records to analyze, default 100, max 200"),
+				format: z.enum(["compact", "detailed"]).optional().describe("Response format: 'compact' (default, saves tokens) or 'detailed'"),
 			},
-			async ({ maxResults = 100 }) => {
+			async ({ maxResults = 100, format = "compact" }) => {
 				try {
 					const response = await this.cmpClient.queryEuiccPage({ 
-						pageSize: Math.min(maxResults, 1000) 
+						pageSize: Math.min(maxResults, 200) 
 					});
 					
 					if (response.code === 200 && response.data) {
@@ -541,37 +646,53 @@ export class MyMCP extends McpAgent {
 							enterpriseCounts[enterprise] = (enterpriseCounts[enterprise] || 0) + 1;
 						});
 						
-						let result = `📊 eUICC Profile Statistics\n`;
-						result += `├─ Total Analyzed: ${euiccList.length} devices\n`;
-						result += `├─ Total in System: ${response.data.total}\n\n`;
+						let result: string;
 						
-						// Profile Status Distribution
-						result += `📋 Profile Status Distribution:\n`;
-						Object.entries(statusCounts)
-							.sort((a, b) => b[1] - a[1])
-							.forEach(([status, count]) => {
-								const statusName = getProfileStatusName(parseInt(status));
-								const percentage = ((count / euiccList.length) * 100).toFixed(1);
-								result += `├─ ${statusName}: ${count} (${percentage}%)\n`;
-							});
-						
-						result += `\n🏷️ Profile Type Distribution:\n`;
-						Object.entries(typeCounts)
-							.sort((a, b) => b[1] - a[1])
-							.forEach(([type, count]) => {
-								const typeName = getProfileTypeName(type);
-								const percentage = ((count / euiccList.length) * 100).toFixed(1);
-								result += `├─ ${typeName}: ${count} (${percentage}%)\n`;
-							});
-						
-						result += `\n🏢 Top Enterprises:\n`;
-						Object.entries(enterpriseCounts)
-							.sort((a, b) => b[1] - a[1])
-							.slice(0, 5)
-							.forEach(([enterprise, count]) => {
-								const percentage = ((count / euiccList.length) * 100).toFixed(1);
-								result += `├─ ${enterprise}: ${count} (${percentage}%)\n`;
-							});
+						if (format === "compact") {
+							// Compact format to save tokens
+							result = `📊 eUICC Stats (${euiccList.length}/${response.data.total})\n`;
+							
+							// Top status (most common)
+							const topStatus = Object.entries(statusCounts)
+								.sort((a, b) => b[1] - a[1])[0];
+							if (topStatus) {
+								const [status, count] = topStatus;
+								result += `Top Status: ${getProfileStatusName(parseInt(status))} (${count})\n`;
+							}
+							
+							// Top enterprise
+							const topEnterprise = Object.entries(enterpriseCounts)
+								.sort((a, b) => b[1] - a[1])[0];
+							if (topEnterprise) {
+								const [enterprise, count] = topEnterprise;
+								result += `Top Enterprise: ${enterprise} (${count})`;
+							}
+						} else {
+							// Detailed format
+							result = `📊 eUICC Profile Statistics\n`;
+							result += `├─ Total Analyzed: ${euiccList.length} devices\n`;
+							result += `├─ Total in System: ${response.data.total}\n\n`;
+							
+							// Profile Status Distribution
+							result += `📋 Status Distribution:\n`;
+							Object.entries(statusCounts)
+								.sort((a, b) => b[1] - a[1])
+								.slice(0, 3) // Limit to top 3
+								.forEach(([status, count]) => {
+									const statusName = getProfileStatusName(parseInt(status));
+									const percentage = ((count / euiccList.length) * 100).toFixed(1);
+									result += `├─ ${statusName}: ${count} (${percentage}%)\n`;
+								});
+							
+							result += `\n🏢 Top Enterprises:\n`;
+							Object.entries(enterpriseCounts)
+								.sort((a, b) => b[1] - a[1])
+								.slice(0, 3) // Limit to top 3
+								.forEach(([enterprise, count]) => {
+									const percentage = ((count / euiccList.length) * 100).toFixed(1);
+									result += `├─ ${enterprise}: ${count} (${percentage}%)\n`;
+								});
+						}
 						
 						return { content: [{ type: "text", text: result }] };
 					} else {

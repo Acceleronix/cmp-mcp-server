@@ -334,7 +334,7 @@ export class CMPClient {
 	}
 
 
-	async queryEuiccPage(options: EuiccPageQuery = {}): Promise<APIResponse<EuiccPageResponse>> {
+	async queryEuiccPage(options: EuiccPageQuery = {}): Promise<APIResponse<EuiccPageData>> {
 		const {
 			childEnterpriseId,
 			iccid,
@@ -377,5 +377,18 @@ export class CMPClient {
 			return `${Math.round(size)} ${units[unitIndex]}`;
 		}
 		return `${size.toFixed(2)} ${units[unitIndex]}`;
+	}
+
+	// Helper functions for cursor-based pagination (using Web APIs for Cloudflare Workers)
+	static createCursor(data: any): string {
+		return btoa(JSON.stringify(data));
+	}
+
+	static parseCursor(cursor: string): any {
+		try {
+			return JSON.parse(atob(cursor));
+		} catch {
+			throw new Error("Invalid cursor format");
+		}
 	}
 }
